@@ -263,7 +263,7 @@ def CatboostOUT2(all_samples,train_samp,Xcoords, Ycoords, Zcoords,k,threshold,nt
     else:
         samples = all_samples
     Xtrain,Ytrain,Xtest,Ytest,CI_data = CI_sampler_conditional_kNN(all_samples[:,Xcoords],all_samples[:,Ycoords], all_samples[:,Zcoords],train_samp,k)
-    model = catboost.CatBoostClassifier( thread_count=nthread)#,learning_rate=0.02,iterations=bp['n_estimator'],depth=bp['max_depth'],subsample=0.8,random_seed=11)
+    model = catboost.CatBoostClassifier( thread_count=nthread,logging_level='Silent')#,learning_rate=0.02,iterations=bp['n_estimator'],depth=bp['max_depth'],subsample=0.8,random_seed=11)
     #model = xgb.XGBClassifier(nthread=nthread,learning_rate =0.02, n_estimators=bp['n_estimator'], max_depth=bp['max_depth'],min_child_weight=1, gamma=0, subsample=0.8, colsample_bytree=bp['colsample_bytree'],objective= 'binary:logistic',scale_pos_weight=1, seed=11)
     gbm = model.fit(Xtrain,Ytrain)
     pred = gbm.predict_proba(Xtest)
@@ -300,7 +300,7 @@ def CatboostOUT_Independence(all_samples,train_samp,Xcoords, Ycoords, k,threshol
     #    model = catboost.CatBoostClassifier( thread_count=nthread,learning_rate=0.02,iterations=bp['n_estimator'],depth=bp['max_depth'],subsample=0.8,random_seed=11)
         #model = xgb.XGBClassifier(nthread=nthread,learning_rate =0.02, n_estimators=bp['n_estimator'], max_depth=bp['max_depth'],min_child_weight=1, gamma=0, subsample=0.8, colsample_bytree=bp['colsample_bytree'],objective= 'binary:logistic',scale_pos_weight=1, seed=11)
     #else:
-    model = catboost.CatBoostClassifier()
+    model = catboost.CatBoostClassifier(logging_level='Silent')
         #model = xgb.XGBClassifier() 
     gbm = model.fit(Xtrain,Ytrain)
     pred = gbm.predict_proba(Xtest)
