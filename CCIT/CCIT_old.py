@@ -251,7 +251,7 @@ def cross_validate(classifier, n_folds = 5):
     return score/n_folds
 
 
-def CatboostOUT2(all_samples,train_samp,Xcoords, Ycoords, Zcoords,k,threshold,nthread,bootstrap = True):
+def CatboostOUT2(bp, all_samples,train_samp,Xcoords, Ycoords, Zcoords,k,threshold,nthread,bootstrap = True):
     '''Function that takes a CI test data-set and returns classification accuracy after Nearest-Neighbor  Bootstrap'''
     
     num_samp = len(all_samples)
@@ -263,7 +263,7 @@ def CatboostOUT2(all_samples,train_samp,Xcoords, Ycoords, Zcoords,k,threshold,nt
     else:
         samples = all_samples
     Xtrain,Ytrain,Xtest,Ytest,CI_data = CI_sampler_conditional_kNN(all_samples[:,Xcoords],all_samples[:,Ycoords], all_samples[:,Zcoords],train_samp,k)
-    model = catboost.CatBoostClassifier( thread_count=nthread)#,learning_rate=0.02,iterations=bp['n_estimator'],depth=bp['max_depth'],subsample=0.8,random_seed=11)
+    model = catboost.CatBoostClassifier( thread_count=nthread,learning_rate=0.02,iterations=bp['n_estimator'],depth=bp['max_depth'],subsample=0.8,random_seed=11)
     #model = xgb.XGBClassifier(nthread=nthread,learning_rate =0.02, n_estimators=bp['n_estimator'], max_depth=bp['max_depth'],min_child_weight=1, gamma=0, subsample=0.8, colsample_bytree=bp['colsample_bytree'],objective= 'binary:logistic',scale_pos_weight=1, seed=11)
     gbm = model.fit(Xtrain,Ytrain)
     pred = gbm.predict_proba(Xtest)
@@ -283,7 +283,7 @@ def CatboostOUT2(all_samples,train_samp,Xcoords, Ycoords, Zcoords,k,threshold,nt
         return [1.0, AUC1 - AUC2, AUC2 - 0.5, acc1 - acc2, acc2 - 0.5]
 
 
-def CatboostOUT_Independence(all_samples,train_samp,Xcoords, Ycoords, k,threshold,nthread,bootstrap = True):
+def CatboostOUT_Independence(bp, all_samples,train_samp,Xcoords, Ycoords, k,threshold,nthread,bootstrap = True):
     '''Function that takes a CI test data-set and returns classification accuracy after Nearest-Neighbor  Bootstrap'''
     
     num_samp = len(all_samples)
@@ -296,11 +296,11 @@ def CatboostOUT_Independence(all_samples,train_samp,Xcoords, Ycoords, k,threshol
         samples = all_samples
     Xtrain,Ytrain,Xtest,Ytest,CI_data = CI_sampler_conditional_kNN(all_samples[:,Xcoords],all_samples[:,Ycoords], None,train_samp,k)
     s1,s2 = Xtrain.shape
-    #if s2 >= 4:
-    #    model = catboost.CatBoostClassifier( thread_count=nthread,learning_rate=0.02,iterations=bp['n_estimator'],depth=bp['max_depth'],subsample=0.8,random_seed=11)
+    if s2 >= 4:
+        model = catboost.CatBoostClassifier( thread_count=nthread,learning_rate=0.02,iterations=bp['n_estimator'],depth=bp['max_depth'],subsample=0.8,random_seed=11)
         #model = xgb.XGBClassifier(nthread=nthread,learning_rate =0.02, n_estimators=bp['n_estimator'], max_depth=bp['max_depth'],min_child_weight=1, gamma=0, subsample=0.8, colsample_bytree=bp['colsample_bytree'],objective= 'binary:logistic',scale_pos_weight=1, seed=11)
-    #else:
-    model = catboost.CatBoostClassifier()
+    else:
+        model = catboost.CatBoostClassifier()
         #model = xgb.XGBClassifier() 
     gbm = model.fit(Xtrain,Ytrain)
     pred = gbm.predict_proba(Xtest)
@@ -323,16 +323,16 @@ def pvalue(x,sigma):
 def bootstrap_Catboost_Independence(max_depths, n_estimators, colsample_bytrees,nfold,feature_selection,all_samples,train_samp,Xcoords, Ycoords, k,threshold,num_iter,nthread, bootstrap = False):
     np.random.seed(11)
     Xtrain,Ytrain,Xtest,Ytest,CI_data = CI_sampler_conditional_kNN(all_samples[:,Xcoords],all_samples[:,Ycoords], None,train_samp,k)
-    #model,bp = Catboost_crossvalidated_model(max_depths, n_estimators, colsample_bytrees,Xtrain,Ytrain,nfold,feature_selection = 0,nthread = nthread)
+    model,bp = Catboost_crossvalidated_model(max_depths, n_estimators, colsample_bytrees,Xtrain,Ytrain,nfold,feature_selection = 0,nthread = nthread)
     ntot,dtot = all_samples.shape
-    #del model
+    del model
     cleaned = []
     if bootstrap:
         assert (num_iter >= 20),"Number of bootstrap iteration should be atleast 20."
     if bootstrap == False:
         num_iter = 1
     for i in range(num_iter):
-        r = CatboostOUT_Independence(all_samples,train_samp,Xcoords, Ycoords,k,threshold,nthread,bootstrap)
+        r = CatboostOUT_Independence(bp, all_samples,train_samp,Xcoords, Ycoords,k,threshold,nthread,bootstrap)
         cleaned = cleaned + [r]
     cleaned = np.array(cleaned)
     R = np.mean(cleaned,axis = 0)
@@ -352,16 +352,16 @@ def bootstrap_Catboost_Independence(max_depths, n_estimators, colsample_bytrees,
 def bootstrap_Catboost2(max_depths, n_estimators, colsample_bytrees,nfold,feature_selection,all_samples,train_samp,Xcoords, Ycoords, Zcoords,k,threshold,num_iter,nthread, bootstrap = False):
     np.random.seed(11)
     Xtrain,Ytrain,Xtest,Ytest,CI_data = CI_sampler_conditional_kNN(all_samples[:,Xcoords],all_samples[:,Ycoords], all_samples[:,Zcoords],train_samp,k)
-    #model,bp = Catboost_crossvalidated_model(max_depths, n_estimators, colsample_bytrees,Xtrain,Ytrain,nfold,feature_selection = 0,nthread = nthread)
+    model,bp = Catboost_crossvalidated_model(max_depths, n_estimators, colsample_bytrees,Xtrain,Ytrain,nfold,feature_selection = 0,nthread = nthread)
     ntot,dtot = all_samples.shape
-    #del model
+    del model
     cleaned = []
     if bootstrap:
         assert (num_iter >= 20),"Number of bootstrap iteration should be atleast 20."
     if bootstrap == False:
         num_iter = 1
     for i in range(num_iter):
-        cleaned = cleaned + [CatboostOUT2(all_samples,train_samp,Xcoords, Ycoords, Zcoords,k,threshold,nthread,bootstrap)]
+        cleaned = cleaned + [CatboostOUT2(bp, all_samples,train_samp,Xcoords, Ycoords, Zcoords,k,threshold,nthread,bootstrap)]
     cleaned = np.array(cleaned)
     R = np.mean(cleaned,axis = 0)
     S = np.std(cleaned,axis = 0)
