@@ -17,6 +17,7 @@ from sklearn.model_selection import KFold
 import itertools
 from sklearn.cluster import KMeans
 from sklearn.neighbors import NearestNeighbors
+from distython import HEOM
 
 from math import erfc
 import random
@@ -27,7 +28,7 @@ import catboost
 
 
 
-def CI_sampler_conditional_kNN(X_in,Y_in,Z_in,train_len = -1, k = 1):
+def CI_sampler_conditional_kNN(X_in,Y_in,Z_in,cat_columns,train_len = -1, k = 1):
     '''Generate Test and Train set for converting CI testing into Binary Classification
     Arguments:
     	X_in: Samples of r.v. X (np.array)
@@ -96,7 +97,8 @@ def CI_sampler_conditional_kNN(X_in,Y_in,Z_in,train_len = -1, k = 1):
     Y = train_2[:,Yset]
     Z = train_2[:,Zset]
     Yprime = copy.deepcopy(Y)
-    nbrs = NearestNeighbors(n_neighbors=k+1, algorithm='ball_tree',metric = 'l2').fit(Z)
+    heom_metric = HEOM(Z, cat_columns)
+    nbrs = NearestNeighbors(n_neighbors=k+1, algorithm='ball_tree',metric = heom_metric.heom).fit(Z)
     distances, indices = nbrs.kneighbors(Z)
     for i in range(len(train_2)):
         index = indices[i,k]
@@ -120,7 +122,8 @@ def CI_sampler_conditional_kNN(X_in,Y_in,Z_in,train_len = -1, k = 1):
     Y = test_2[:,Yset]
     Z = test_2[:,Zset]
     Yprime = copy.deepcopy(Y)
-    nbrs = NearestNeighbors(n_neighbors=k+1, algorithm='ball_tree',metric = 'l2').fit(Z)
+    heom_metric = HEOM(Z, cat_columns)
+    nbrs = NearestNeighbors(n_neighbors=k+1, algorithm='ball_tree',metric = heom_metric.heom).fit(Z)
     distances, indices = nbrs.kneighbors(Z)
     for i in range(len(test_2)):
         index = indices[i,k]
@@ -251,7 +254,7 @@ def cross_validate(classifier, n_folds = 5):
     return score/n_folds
 
 
-def CatboostOUT2(all_samples,train_samp,Xcoords, Ycoords, Zcoords,k,threshold,nthread,bootstrap = True):
+def CatboostOUT2(all_samples,train_samp,Xcoords, Ycoords, Zcoords,k,threshold,nthread,cat_columns,bootstrap = True):
     '''Function that takes a CI test data-set and returns classification accuracy after Nearest-Neighbor  Bootstrap'''
     
     num_samp = len(all_samples)
@@ -262,7 +265,7 @@ def CatboostOUT2(all_samples,train_samp,Xcoords, Ycoords, Zcoords,k,threshold,nt
         samples = all_samples[I,:]
     else:
         samples = all_samples
-    Xtrain,Ytrain,Xtest,Ytest,CI_data = CI_sampler_conditional_kNN(all_samples[:,Xcoords],all_samples[:,Ycoords], all_samples[:,Zcoords],train_samp,k)
+    Xtrain,Ytrain,Xtest,Ytest,CI_data = CI_sampler_conditional_kNN(all_samples[:,Xcoords],all_samples[:,Ycoords], all_samples[:,Zcoords],cat_columns,train_samp,k)
     model = catboost.CatBoostClassifier( thread_count=nthread,logging_level='Silent')#,learning_rate=0.02,iterations=bp['n_estimator'],depth=bp['max_depth'],subsample=0.8,random_seed=11)
     #model = xgb.XGBClassifier(nthread=nthread,learning_rate =0.02, n_estimators=bp['n_estimator'], max_depth=bp['max_depth'],min_child_weight=1, gamma=0, subsample=0.8, colsample_bytree=bp['colsample_bytree'],objective= 'binary:logistic',scale_pos_weight=1, seed=11)
     gbm = model.fit(Xtrain,Ytrain)
@@ -283,7 +286,7 @@ def CatboostOUT2(all_samples,train_samp,Xcoords, Ycoords, Zcoords,k,threshold,nt
         return [1.0, AUC1 - AUC2, AUC2 - 0.5, acc1 - acc2, acc2 - 0.5]
 
 
-def CatboostOUT_Independence(all_samples,train_samp,Xcoords, Ycoords, k,threshold,nthread,bootstrap = True):
+def CatboostOUT_Independence(all_samples,train_samp,Xcoords, Ycoords, k,threshold,nthread,cat_columns,bootstrap = True):
     '''Function that takes a CI test data-set and returns classification accuracy after Nearest-Neighbor  Bootstrap'''
     
     num_samp = len(all_samples)
@@ -294,7 +297,7 @@ def CatboostOUT_Independence(all_samples,train_samp,Xcoords, Ycoords, k,threshol
         samples = all_samples[I,:]
     else:
         samples = all_samples
-    Xtrain,Ytrain,Xtest,Ytest,CI_data = CI_sampler_conditional_kNN(all_samples[:,Xcoords],all_samples[:,Ycoords], None,train_samp,k)
+    Xtrain,Ytrain,Xtest,Ytest,CI_data = CI_sampler_conditional_kNN(all_samples[:,Xcoords],all_samples[:,Ycoords], None,cat_columns,train_samp,k)
     s1,s2 = Xtrain.shape
     #if s2 >= 4:
     #    model = catboost.CatBoostClassifier( thread_count=nthread,learning_rate=0.02,iterations=bp['n_estimator'],depth=bp['max_depth'],subsample=0.8,random_seed=11)
@@ -320,9 +323,9 @@ def pvalue(x,sigma):
 
 
 
-def bootstrap_Catboost_Independence(max_depths, n_estimators, colsample_bytrees,nfold,feature_selection,all_samples,train_samp,Xcoords, Ycoords, k,threshold,num_iter,nthread, bootstrap = False):
+def bootstrap_Catboost_Independence(max_depths, n_estimators, colsample_bytrees,nfold,feature_selection,all_samples,train_samp,Xcoords, Ycoords, k,threshold,num_iter,nthread, cat_columns,bootstrap = False):
     np.random.seed(11)
-    Xtrain,Ytrain,Xtest,Ytest,CI_data = CI_sampler_conditional_kNN(all_samples[:,Xcoords],all_samples[:,Ycoords], None,train_samp,k)
+    Xtrain,Ytrain,Xtest,Ytest,CI_data = CI_sampler_conditional_kNN(all_samples[:,Xcoords],all_samples[:,Ycoords], None,cat_columns,train_samp,k)
     #model,bp = Catboost_crossvalidated_model(max_depths, n_estimators, colsample_bytrees,Xtrain,Ytrain,nfold,feature_selection = 0,nthread = nthread)
     ntot,dtot = all_samples.shape
     #del model
@@ -332,7 +335,7 @@ def bootstrap_Catboost_Independence(max_depths, n_estimators, colsample_bytrees,
     if bootstrap == False:
         num_iter = 1
     for i in range(num_iter):
-        r = CatboostOUT_Independence(all_samples,train_samp,Xcoords, Ycoords,k,threshold,nthread,bootstrap)
+        r = CatboostOUT_Independence(all_samples,train_samp,Xcoords, Ycoords,k,threshold,nthread,cat_columns,bootstrap)
         cleaned = cleaned + [r]
     cleaned = np.array(cleaned)
     R = np.mean(cleaned,axis = 0)
@@ -349,9 +352,9 @@ def bootstrap_Catboost_Independence(max_depths, n_estimators, colsample_bytrees,
 
 
 
-def bootstrap_Catboost2(max_depths, n_estimators, colsample_bytrees,nfold,feature_selection,all_samples,train_samp,Xcoords, Ycoords, Zcoords,k,threshold,num_iter,nthread, bootstrap = False):
+def bootstrap_Catboost2(max_depths, n_estimators, colsample_bytrees,nfold,feature_selection,all_samples,train_samp,Xcoords, Ycoords, Zcoords,k,threshold,num_iter,nthread, cat_columns,bootstrap = False):
     np.random.seed(11)
-    Xtrain,Ytrain,Xtest,Ytest,CI_data = CI_sampler_conditional_kNN(all_samples[:,Xcoords],all_samples[:,Ycoords], all_samples[:,Zcoords],train_samp,k)
+    Xtrain,Ytrain,Xtest,Ytest,CI_data = CI_sampler_conditional_kNN(all_samples[:,Xcoords],all_samples[:,Ycoords], all_samples[:,Zcoords],cat_columns,train_samp,k)
     #model,bp = Catboost_crossvalidated_model(max_depths, n_estimators, colsample_bytrees,Xtrain,Ytrain,nfold,feature_selection = 0,nthread = nthread)
     ntot,dtot = all_samples.shape
     #del model
@@ -361,7 +364,7 @@ def bootstrap_Catboost2(max_depths, n_estimators, colsample_bytrees,nfold,featur
     if bootstrap == False:
         num_iter = 1
     for i in range(num_iter):
-        cleaned = cleaned + [CatboostOUT2(all_samples,train_samp,Xcoords, Ycoords, Zcoords,k,threshold,nthread,bootstrap)]
+        cleaned = cleaned + [CatboostOUT2(all_samples,train_samp,Xcoords, Ycoords, Zcoords,k,threshold,nthread,cat_columns,bootstrap)]
     cleaned = np.array(cleaned)
     R = np.mean(cleaned,axis = 0)
     S = np.std(cleaned,axis = 0)
@@ -395,7 +398,7 @@ def bootstrap_Catboost2(max_depths, n_estimators, colsample_bytrees,nfold,featur
     dic['pval'] = R[7]
     return dic
 
-def CCIT(X,Y,Z,max_depths = [6,10,13], n_estimators=[100,200,300], colsample_bytrees=[0.8],nfold = 5,feature_selection = 0,train_samp = -1,k = 1,threshold = 0.03,num_iter = 20,nthread = 8,bootstrap = False):
+def CCIT(X,Y,Z,cat_columns,max_depths = [6,10,13], n_estimators=[100,200,300], colsample_bytrees=[0.8],nfold = 5,feature_selection = 0,train_samp = -1,k = 1,threshold = 0.03,num_iter = 20,nthread = 8,bootstrap = False):
     '''Main function to generate pval of the CI test. If pval is low CI is rejected if its high we fail to reject CI.
         X: Input X table
         Y: Input Y table
@@ -429,7 +432,7 @@ def CCIT(X,Y,Z,max_depths = [6,10,13], n_estimators=[100,200,300], colsample_byt
         if train_samp == -1:
             train_len = int((2*nx)/3)
 
-        dic = bootstrap_Catboost_Independence(max_depths = max_depths, n_estimators=n_estimators, colsample_bytrees=colsample_bytrees,nfold=nfold,feature_selection=0,all_samples=all_samples,train_samp = train_len,Xcoords = Xset, Ycoords = Yset,k = k,threshold = threshold,num_iter = num_iter,nthread = nthread,bootstrap = bootstrap)
+        dic = bootstrap_Catboost_Independence(max_depths = max_depths, n_estimators=n_estimators, colsample_bytrees=colsample_bytrees,nfold=nfold,feature_selection=0,all_samples=all_samples,train_samp = train_len,Xcoords = Xset, Ycoords = Yset,k = k,threshold = threshold,num_iter = num_iter,nthread = nthread,cat_columns=cat_columns,bootstrap = bootstrap)
         return dic['pval']
     
     assert (type(X) == np.ndarray),"Not an array"
@@ -462,7 +465,7 @@ def CCIT(X,Y,Z,max_depths = [6,10,13], n_estimators=[100,200,300], colsample_byt
 
     return dic['pval']
 
-def CCIT_statistic(X,Y,Z,max_depths = [6,10,13], n_estimators=[100,200,300], colsample_bytrees=[0.8],nfold = 5,feature_selection = 0,train_samp = -1,k = 1,threshold = 0.03,num_iter = 20,nthread = 8,bootstrap = False):
+def CCIT_statistic(X,Y,Z,cat_columns,max_depths = [6,10,13], n_estimators=[100,200,300], colsample_bytrees=[0.8],nfold = 5,feature_selection = 0,train_samp = -1,k = 1,threshold = 0.03,num_iter = 20,nthread = 8,bootstrap = False):
     '''Main function to generate pval of the CI test. If pval is low CI is rejected if its high we fail to reject CI.
         X: Input X table
         Y: Input Y table
@@ -496,7 +499,7 @@ def CCIT_statistic(X,Y,Z,max_depths = [6,10,13], n_estimators=[100,200,300], col
         if train_samp == -1:
             train_len = int((2*nx)/3)
 
-        dic = bootstrap_Catboost_Independence(max_depths = max_depths, n_estimators=n_estimators, colsample_bytrees=colsample_bytrees,nfold=nfold,feature_selection=0,all_samples=all_samples,train_samp = train_len,Xcoords = Xset, Ycoords = Yset,k = k,threshold = threshold,num_iter = num_iter,nthread = nthread,bootstrap = bootstrap)
+        dic = bootstrap_Catboost_Independence(max_depths = max_depths, n_estimators=n_estimators, colsample_bytrees=colsample_bytrees,nfold=nfold,feature_selection=0,all_samples=all_samples,train_samp = train_len,Xcoords = Xset, Ycoords = Yset,k = k,threshold = threshold,num_iter = num_iter,nthread = nthread,cat_columns=cat_columns,bootstrap = bootstrap)
         return dic['auc_difference']
     
     assert (type(X) == np.ndarray),"Not an array"
@@ -525,7 +528,7 @@ def CCIT_statistic(X,Y,Z,max_depths = [6,10,13], n_estimators=[100,200,300], col
 
     #print train_len
 
-    dic = bootstrap_Catboost2(max_depths = max_depths, n_estimators=n_estimators, colsample_bytrees=colsample_bytrees,nfold=nfold,feature_selection=0,all_samples=all_samples,train_samp = train_len,Xcoords = Xset, Ycoords = Yset, Zcoords = Zset ,k = k,threshold = threshold,num_iter = num_iter,nthread = nthread,bootstrap = bootstrap)
+    dic = bootstrap_Catboost2(max_depths = max_depths, n_estimators=n_estimators, colsample_bytrees=colsample_bytrees,nfold=nfold,feature_selection=0,all_samples=all_samples,train_samp = train_len,Xcoords = Xset, Ycoords = Yset, Zcoords = Zset ,k = k,threshold = threshold,num_iter = num_iter,nthread = nthread,cat_columns=cat_columns,bootstrap = bootstrap)
 
     return dic['auc_difference']
     
