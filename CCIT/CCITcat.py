@@ -77,7 +77,25 @@ def CI_sampler_conditional_kNN(X_in,Y_in,Z_in,train_len = -1, k = 1):
     assert (nx == ny), "Dimension Mismatch"
     assert (nz == ny), "Dimension Mismatch"
     assert (nx == nz), "Dimension Mismatch"
-
+    labels=[]
+    for i in range(0,X_in.shape[1]):
+        labels.append(pd.factorize(X_in[:,i])[1])
+        X_in=pd.factorize(X_in[:,i])[0]
+        X_in=np.expand_dims(X_in,1)
+    for j in range(0,Y_in.shape[1]):
+        labels.append(pd.factorize(Y_in[:,i])[1])
+        Y_in=pd.factorize(Y_in[:,j])[0]
+        Y_in=np.expand_dims(Y_in,1)
+    Zshape=Z_in.shape[1]
+    Z_orig=Z_in
+    Z_in=pd.factorize(Z_orig[:,0])[0]
+    Z_in=np.expand_dims(Z_in,1)
+    labels.append(pd.factorize(Z_orig[:,0])[1])
+    for k in range(1,Zshape):
+        labels.append(pd.factorize(Z_orig[:,k])[1])
+        add=pd.factorize(Z_orig[:,k])[0]
+        add=np.expand_dims(add,1)
+        Z_in=np.append(Z_in,add,axis=1)
     samples = np.hstack([X_in,Y_in,Z_in])
 
     Xset = range(0,dx)
@@ -89,16 +107,25 @@ def CI_sampler_conditional_kNN(X_in,Y_in,Z_in,train_len = -1, k = 1):
 
     assert (train_len < nx), "Training length cannot be larger than total length"
 
+
     train = samples[0:train_len,:]
     train_2 = copy.deepcopy(train)
     X = train_2[:,Xset]
     Y = train_2[:,Yset]
     Z = train_2[:,Zset]
     Yprime = copy.deepcopy(Y)
-    nbrs = NearestNeighbors(n_neighbors=k+1, algorithm='ball_tree',metric = 'hamming').fit(Z)
-    distances, indices = nbrs.kneighbors(Z)
+    #nbrs = NearestNeighbors(n_neighbors=k+1, algorithm='ball_tree',metric = 'hamming').fit(Z)
+    nbrs = NearestNeighbors(n_neighbors=1000, algorithm='ball_tree',metric = 'hamming').fit(Z)
+    #distances, indices = nbrs.kneighbors(Z)
+    distances, indices = nbrs.radius_neighbors(Z,0)
+    #print(distances)
+    #print(indices)
     for i in range(len(train_2)):
-        index = indices[i,k]
+        print(len(indices[i]))
+        index=np.random.choice(indices[i])
+        while (index==i):
+            index=np.random.choice(indices[i])
+        #print(index)
         Yprime[i,:] = Y[index,:]
     train1 = train_2
     train2 = np.hstack([X,Yprime,Z])
@@ -138,6 +165,43 @@ def CI_sampler_conditional_kNN(X_in,Y_in,Z_in,train_len = -1, k = 1):
     Ytest = test[:,m-1]
     
     CI_data = np.vstack([train2,test2])
+
+    Xtrain=Xtrain.astype(int)
+    Xtrain=Xtrain.astype(str)
+    for i in range(0,len(labels)):
+        for j in range(0,len(Xtrain[:,i])):
+            Xtrain[:,i][j]=str(Xtrain[:,i][j])
+            Xtrain[:,i][j]=labels[i][int(Xtrain[:,i][j])]
+    Xtest=Xtest.astype(int)
+    Xtest=Xtest.astype(str)
+    for i in range(0,len(labels)):
+        for j in range(0,len(Xtest[:,i])):
+            Xtest[:,i][j]=str(Xtest[:,i][j])
+            Xtest[:,i][j]=labels[i][int(Xtest[:,i][j])]
+    CI_data=CI_data.astype(int)
+    CI_data=CI_data.astype(str)
+    for i in range(0,len(labels)):
+        for j in range(0,len(CI_data[:,i])):
+            CI_data[:,i][j]=str(CI_data[:,i][j])
+            CI_data[:,i][j]=labels[i][int(CI_data[:,i][j])]
+
+    for i in range(0,X_in.shape[1]):
+        labels.append(pd.factorize(X_in[:,i])[1])
+        X_in=pd.factorize(X_in[:,i])[0]
+        X_in=np.expand_dims(X_in,1)
+    for j in range(0,Y_in.shape[1]):
+        labels.append(pd.factorize(Y_in[:,i])[1])
+        Y_in=pd.factorize(Y_in[:,j])[0]
+        Y_in=np.expand_dims(Y_in,1)
+    Zshape=Z_in.shape[1]
+    Z_orig=Z_in
+    Z_in=pd.factorize(Z_orig[:,0])[0]
+    Z_in=np.expand_dims(Z_in,1)
+    for k in range(1,Zshape):
+        labels.append(pd.factorize(Z_orig[:,k])[1])
+        add=pd.factorize(Z_orig[:,k])[0]
+        add=np.expand_dims(add,1)
+        Z_in=np.append(Z_in,add,axis=1)
     
     
     return Xtrain,Ytrain,Xtest,Ytest,CI_data
@@ -265,13 +329,16 @@ def CatboostOUT2(all_samples,train_samp,Xcoords, Ycoords, Zcoords,k,threshold,nt
     
     model = catboost.CatBoostClassifier( thread_count=nthread,logging_level='Silent')#,learning_rate=0.02,iterations=bp['n_estimator'],depth=bp['max_depth'],subsample=0.8,random_seed=11)
     #model = xgb.XGBClassifier(nthread=nthread,learning_rate =0.02, n_estimators=bp['n_estimator'], max_depth=bp['max_depth'],min_child_weight=1, gamma=0, subsample=0.8, colsample_bytree=bp['colsample_bytree'],objective= 'binary:logistic',scale_pos_weight=1, seed=11)
-    gbm = model.fit(Xtrain,Ytrain)
+    #model = xgb.XGBClassifier()
+    cat_columns = np.arange(Xtrain.shape[1])
+    gbm = model.fit(Xtrain,Ytrain,cat_columns)
     pred = gbm.predict_proba(Xtest)
     pred_exact = gbm.predict(Xtest)
     acc1 = accuracy_score(Ytest, pred_exact)
     AUC1 = roc_auc_score(Ytest,pred[:,1])
     del gbm
-    gbm = model.fit(Xtrain[:,len(Xcoords)::],Ytrain)
+    cat_columns = np.arange(Xtrain[:,len(Xcoords)::].shape[1])
+    gbm = model.fit(Xtrain[:,len(Xcoords)::],Ytrain,cat_columns)
     pred = gbm.predict_proba(Xtest[:,len(Xcoords)::])
     pred_exact = gbm.predict(Xtest[:,len(Xcoords)::])
     acc2 = accuracy_score(Ytest, pred_exact)
@@ -323,8 +390,8 @@ def pvalue(x,sigma):
 def bootstrap_Catboost_Independence(max_depths, n_estimators, colsample_bytrees,nfold,feature_selection,all_samples,train_samp,Xcoords, Ycoords, k,threshold,num_iter,nthread, bootstrap = False):
     np.random.seed(11)
     Xtrain,Ytrain,Xtest,Ytest,CI_data = CI_sampler_conditional_kNN(all_samples[:,Xcoords],all_samples[:,Ycoords], None,train_samp,k)
-    Xtrain = np.array(list(map(str, list(Xtrain))))
-    print(Xtrain)
+    #Xtrain = np.array(list(map(str, list(Xtrain))))
+    #print(Xtrain)
     #model,bp = Catboost_crossvalidated_model(max_depths, n_estimators, colsample_bytrees,Xtrain,Ytrain,nfold,feature_selection = 0,nthread = nthread)
     ntot,dtot = all_samples.shape
     #del model
